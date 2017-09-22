@@ -1,17 +1,24 @@
 #!/usr/bin/env python
 
-from flask import Flask, render_template, request, Response, flash, redirect, url_for
-from functools import wraps
-import flask.ext.login as flask_login
 import hashlib
-import pickle
-from forms import loginForm, initialSetupForm, userForm, wifiForm, vpnPskForm, resetToDefaultForm, statusForm
-from scripts.rpi_network_conn import add_wifi, internet_status, reset_wifi
-from scripts.vpn_server_conn import set_vpn_params, reset_vpn_params, start_vpn, stop_vpn, restart_vpn, vpn_status, vpn_configuration_status
-from scripts.pi_mgmt import pi_reboot, pi_shutdown, start_ssh_service, update_client
-import time
 import os
-import json
+import pickle
+import time
+from functools import wraps
+
+import flask.ext.login as flask_login
+from flask import (
+    Flask, render_template, request, Response, flash, redirect, url_for)
+
+from forms import (
+    loginForm, initialSetupForm, userForm, wifiForm, vpnPskForm,
+    resetToDefaultForm, statusForm)
+from scripts.pi_mgmt import (
+    pi_reboot, pi_shutdown, start_ssh_service, update_client)
+from scripts.rpi_network_conn import add_wifi, internet_status, reset_wifi
+from scripts.vpn_server_conn import (
+    set_vpn_params, reset_vpn_params, start_vpn, stop_vpn, restart_vpn,
+    vpn_status, vpn_configuration_status)
 
 app = Flask(__name__)
 login_manager = flask_login.LoginManager()
@@ -22,7 +29,8 @@ login_manager.init_app(app)
 
 # users = {"admin":{"password":"2074ad04839ae517751e5948ae13f0e3c90d186c9c9bbd29c3c88b9c6000dba5", "salt":"uOMbInZTYYpiCGvEaH8Byw==\n"}}
 # default username=admin password=gosecure, user is prompted to change if default is being used.
-users = pickle.load(open("/home/pi/goSecure_Web_GUI/users_db.p", "rb"))
+with open("/home/pi/goSecure_Web_GUI/users_db.p", "rb") as fin:
+    users = pickle.load(fin)
 
 
 class User(flask_login.UserMixin):
@@ -101,10 +109,7 @@ def user_validate_credentials(username, password):
         stored_password = users[username]['password']
         stored_salt = users[username]['salt']
         userPasswordHash = hashlib.sha256(str(stored_salt) + password).hexdigest()
-        if stored_password == userPasswordHash:
-            return True
-        else:
-            return False
+        return stored_password == userPasswordHash
 
 
 # return True is password is changed successfully
@@ -120,7 +125,8 @@ def user_change_credentials(username, password, new_password):
             userPasswordHash = hashlib.sha256(str(userPasswordHashSalt) + new_password).hexdigest()
             users[username]["salt"] = userPasswordHashSalt
             users[username]["password"] = userPasswordHash
-            pickle.dump(users, open("/home/pi/goSecure_Web_GUI/users_db.p", "wb"))
+            with open("/home/pi/goSecure_Web_GUI/users_db.p", "wb") as fout:
+                pickle.dump(users, fout)
             return True
         else:
             return False
@@ -129,12 +135,9 @@ def user_change_credentials(username, password, new_password):
 # return True if credentials are reset
 # else return False
 def user_reset_credentials(username, password):
-    if user_change_credentials(username, password, "gosecure"):
-        return True
-    else:
-        return False
+    return user_change_credentials(username, password, "gosecure")
 
-    
+
 # Routes for web pages
 
 # 404 page
@@ -204,13 +207,8 @@ def status():
     
     if request.method == "GET":
         # check to see if network and vpn are active, red=not active, green=active
-        internet_status_color = "red"
-        if internet_status():
-            internet_status_color = "green"
-        vpn_status_color = "red"
-        if vpn_status():
-            vpn_status_color = "green"
-
+        internet_status_color = "green" if internet_status() else "red"
+        vpn_status_color = "green" if vpn_status() else "red"
         return render_template("status.html", form=form, internet_status_color=internet_status_color, vpn_status_color=vpn_status_color)
 
 
